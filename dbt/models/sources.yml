@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: raw
+    database: "{{ env_var('POSTGRES_DB', 'retize_social') }}"
+    schema: raw
+    description: Tabelas brutas carregadas dos CSVs pelo pipeline dlt.
+    tables:
+      - name: instagram_media
+        description: Conteudos brutos do Instagram em nivel de publicacao ou story.
+      - name: instagram_media_insights
+        description: Metricas brutas de performance dos conteudos do Instagram.
+      - name: instagram_comments
+        description: Comentarios brutos do Instagram com classificacao de sentimento.
+      - name: tiktok_posts
+        description: Posts brutos do TikTok com metricas de performance.
+      - name: tiktok_comments
+        description: Comentarios brutos do TikTok com classificacao de sentimento.

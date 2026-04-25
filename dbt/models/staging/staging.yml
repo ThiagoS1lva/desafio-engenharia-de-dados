@@ -1,0 +1,114 @@
+version: 2
+
+models:
+  - name: stg_instagram__media
+    description: Conteudos do Instagram tipados e deduplicados em nivel de publicacao.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['instagram']
+      - name: content_id
+        data_tests:
+          - not_null
+          - unique
+      - name: account_name
+        data_tests:
+          - not_null
+      - name: published_at
+        data_tests:
+          - not_null
+
+  - name: stg_instagram__insights
+    description: Metricas de Instagram tipadas e deduplicadas em nivel de conteudo.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['instagram']
+      - name: content_id
+        data_tests:
+          - not_null
+          - unique
+
+  - name: stg_instagram__comments
+    description: Comentarios de Instagram tipados, normalizados e deduplicados por comentario.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['instagram']
+      - name: content_id
+        data_tests:
+          - not_null
+      - name: comment_id
+        data_tests:
+          - not_null
+          - unique
+      - name: comment_timestamp
+        data_tests:
+          - not_null
+      - name: sentiment
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['positivo', 'neutro', 'negativo']
+
+  - name: stg_tiktok__posts
+    description: Posts do TikTok tipados e deduplicados em nivel de publicacao.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['tiktok']
+      - name: content_id
+        data_tests:
+          - not_null
+          - unique
+      - name: account_name
+        data_tests:
+          - not_null
+      - name: published_at
+        data_tests:
+          - not_null
+      - name: content_format
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['VIDEO']
+
+  - name: stg_tiktok__comments
+    description: Comentarios de TikTok tipados, normalizados e deduplicados por comentario.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['tiktok']
+      - name: content_id
+        data_tests:
+          - not_null
+      - name: comment_id
+        data_tests:
+          - not_null
+          - unique
+      - name: comment_timestamp
+        data_tests:
+          - not_null
+      - name: sentiment
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['positivo', 'neutro', 'negativo']
