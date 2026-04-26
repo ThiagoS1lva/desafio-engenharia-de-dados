@@ -1,0 +1,23 @@
+select
+    platform,
+    content_id,
+    account_name,
+    published_at,
+    content_format,
+    likes,
+    comments,
+    shares,
+    video_views,
+    reach,
+    favorites,
+    profile_views,
+    new_followers,
+    total_time_watched,
+    average_time_watched,
+    full_video_watched_rate,
+    video_duration,
+    app_download_clicks,
+    lead_submissions,
+    phone_number_clicks,
+    website_clicks
+from {{ ref('stg_tiktok__posts') }}

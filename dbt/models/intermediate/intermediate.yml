@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: int_instagram__content_metrics
+    description: Conteudos de Instagram com metricas de media e insights unidos por content_id.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+      - name: content_id
+        data_tests:
+          - not_null
+          - unique
+      - name: account_name
+        data_tests:
+          - not_null
+      - name: published_at
+        data_tests:
+          - not_null
+
+  - name: int_tiktok__content_metrics
+    description: Posts do TikTok padronizados para o formato comum de metricas.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+      - name: content_id
+        data_tests:
+          - not_null
+          - unique
+      - name: account_name
+        data_tests:
+          - not_null
+      - name: published_at
+        data_tests:
+          - not_null
+
+  - name: int_content__unified
+    description: Conteudos unificados de Instagram e TikTok com metricas harmonizadas.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['instagram', 'tiktok']
+      - name: content_id
+        data_tests:
+          - not_null
+      - name: account_name
+        data_tests:
+          - not_null
+      - name: published_at
+        data_tests:
+          - not_null
+
+  - name: int_comments__unified
+    description: Comentarios unificados de Instagram e TikTok com sentimento padronizado.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['instagram', 'tiktok']
+      - name: content_id
+        data_tests:
+          - not_null
+      - name: comment_id
+        data_tests:
+          - not_null
+          - unique
+      - name: comment_timestamp
+        data_tests:
+          - not_null
+      - name: sentiment
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['positivo', 'neutro', 'negativo']
