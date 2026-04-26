@@ -34,6 +34,10 @@ models:
         data_tests:
           - not_null
           - unique
+          - relationships:
+              arguments:
+                to: ref('stg_instagram__media')
+                field: content_id
 
   - name: stg_instagram__comments
     description: Comentarios de Instagram tipados, normalizados e deduplicados por comentario.
@@ -47,6 +51,10 @@ models:
       - name: content_id
         data_tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_instagram__media')
+                field: content_id
       - name: comment_id
         data_tests:
           - not_null
@@ -99,6 +107,10 @@ models:
       - name: content_id
         data_tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_tiktok__posts')
+                field: content_id
       - name: comment_id
         data_tests:
           - not_null
