@@ -11,6 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/bootstrap:/docker-entrypoint-initdb.d:ro
+      - ./queries:/queries:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U retize_user -d retize_social"]
       interval: 5s
