@@ -1,42 +1,8 @@
 version: 2
 
 models:
-  - name: int_instagram__content_metrics
-    description: Conteudos de Instagram com metricas de media e insights unidos por content_id.
-    columns:
-      - name: platform
-        data_tests:
-          - not_null
-      - name: content_id
-        data_tests:
-          - not_null
-          - unique
-      - name: account_name
-        data_tests:
-          - not_null
-      - name: published_at
-        data_tests:
-          - not_null
-
-  - name: int_tiktok__content_metrics
-    description: Posts do TikTok padronizados para o formato comum de metricas.
-    columns:
-      - name: platform
-        data_tests:
-          - not_null
-      - name: content_id
-        data_tests:
-          - not_null
-          - unique
-      - name: account_name
-        data_tests:
-          - not_null
-      - name: published_at
-        data_tests:
-          - not_null
-
-  - name: int_content__unified
-    description: Conteudos unificados de Instagram e TikTok com metricas harmonizadas e engajamento calculado.
+  - name: mart_content_performance
+    description: Tabela analitica final com desempenho de conteudos de Instagram e TikTok.
     columns:
       - name: platform
         data_tests:
@@ -47,18 +13,25 @@ models:
       - name: content_id
         data_tests:
           - not_null
+          - unique
       - name: account_name
         data_tests:
           - not_null
       - name: published_at
         data_tests:
           - not_null
+      - name: publish_date
+        data_tests:
+          - not_null
+      - name: weekday
+        data_tests:
+          - not_null
       - name: engagement_total
         data_tests:
           - not_null
 
-  - name: int_comments__unified
-    description: Comentarios unificados de Instagram e TikTok com sentimento padronizado.
+  - name: mart_comment_sentiment
+    description: Tabela analitica final com comentarios e sentimento de Instagram e TikTok.
     columns:
       - name: platform
         data_tests:
@@ -82,3 +55,26 @@ models:
           - accepted_values:
               arguments:
                 values: ['positivo', 'neutro', 'negativo']
+
+  - name: mart_content_with_sentiment
+    description: Tabela analitica final com conteudos, engajamento e agregados de sentimento.
+    columns:
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['instagram', 'tiktok']
+      - name: content_id
+        data_tests:
+          - not_null
+          - unique
+      - name: account_name
+        data_tests:
+          - not_null
+      - name: content_format
+        data_tests:
+          - not_null
+      - name: total_comments_with_sentiment
+        data_tests:
+          - not_null

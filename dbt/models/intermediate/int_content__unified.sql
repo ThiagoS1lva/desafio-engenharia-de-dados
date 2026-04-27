@@ -36,8 +36,31 @@ tiktok as (
         null::integer as total_interactions,
         video_duration
     from {{ ref('int_tiktok__content_metrics') }}
+),
+
+unified as (
+    select * from instagram
+    union all
+    select * from tiktok
+),
+
+with_engagement as (
+    select
+        *,
+        {{ calculate_engagement_total(
+            'platform',
+            'likes',
+            'comments',
+            'shares',
+            'saves_or_favorites',
+            'profile_visits_or_profile_views',
+            'new_followers_or_follows',
+            'total_interactions'
+        ) }} as engagement_total
+    from unified
 )
 
-select * from instagram
-union all
-select * from tiktok
+select
+    *,
+    (engagement_total::numeric / nullif(reach, 0)) * 100 as engagement_rate
+from with_engagement
