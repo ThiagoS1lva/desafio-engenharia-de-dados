@@ -133,6 +133,28 @@ O `engagement_total` é harmonizado entre plataformas:
 - Docker e Docker Compose instalados
 - PowerShell (Windows) ou terminal compatível
 
+### Variáveis de ambiente
+
+Crie o arquivo `.env` a partir do exemplo:
+
+```bash
+cp .env.example .env
+# ou no PowerShell:
+# Copy-Item .env.example .env
+```
+
+Conteúdo esperado:
+
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+
+Observação: no fluxo via `docker compose up -d`, os serviços já recebem essas variáveis internamente.
+O `.env` é mais importante para execuções locais/manuais (ex.: `python -m src.ingestion.dlt_pipeline`).
+O arquivo `.env` não deve ser commitado (já está no `.gitignore`).
+
 ### Execução Completa (Recomendado)
 
 Um único comando sobe todo o ambiente, executa o pipeline e monitora o resultado:
@@ -171,13 +193,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1 -TimeoutMinutes 30
 
 ### Rerun do Pipeline
 
-O script detecta automaticamente runs finalizados e dispara um novo. Para rerun manual:
+O script detecta automaticamente runs finalizados e dispara um novo usando `tasks clear` + `dags trigger`. Para rerun manual:
 
 ```bash
-docker exec airflow_scheduler airflow dags delete retize_social_elt --yes
+docker exec airflow_scheduler airflow dags trigger retize_social_elt --run-id manual__$(date +%s)
 ```
 
-O scheduler recriará automaticamente um novo run.
+Ou, se preferir limpar o estado das tasks antes de disparar:
+
+```bash
+docker exec airflow_scheduler airflow tasks clear retize_social_elt --yes
+docker exec airflow_scheduler airflow dags trigger retize_social_elt --run-id manual__$(date +%s)
+```
+
+O scheduler executará o pipeline novamente do início.
 
 ### Airflow UI
 
@@ -193,6 +222,11 @@ Após o pipeline finalizar, acesse o dashboard interativo:
 - 5 páginas, uma para cada pergunta de negócio
 - Tabelas com resultados e gráficos interativos (Plotly)
 - Light mode, design limpo e responsivo
+
+**Reprodutibilidade**: O dashboard lê diretamente os arquivos `.sql` do diretório `queries/`. Isso significa que:
+- Qualquer alteração nas queries é refletida automaticamente no dashboard
+- Não há duplicação de lógica entre queries e visualização
+- Para validar os resultados manualmente, basta rodar os mesmos arquivos `.sql` com `psql` ou qualquer cliente PostgreSQL
 
 ---
 
