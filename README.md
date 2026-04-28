@@ -1,210 +1,326 @@
-# Desafio Técnico de Engenharia de Dados
+# Desafio Técnico de Engenharia de Dados — Retize
 
-## Sobre a Retize
+## Visão Geral
 
-Você acaba de ingressar no time de Engenharia de Dados da [Retize](https://retize.com.br). Parte do nosso trabalho envolve consolidar dados de performance de redes sociais para permitir análises comparáveis entre plataformas, formatos de conteúdo e contas.
+Solução completa de engenharia de dados para consolidar métricas de performance de redes sociais (Instagram e TikTok), desde a carga de arquivos CSV brutos até um modelo analítico capaz de responder perguntas de negócio sobre alcance, engajamento e sentimento de comentários.
 
-## Nossa Stack
+O pipeline segue o fluxo **ELT**:
 
-Na Retize, usamos PostgreSQL para cargas e consultas operacionais, BigQuery para análise em escala, Airflow para orquestrar pipelines, dlt para extrair e carregar dados de fontes externas e dbt para organizar transformações analíticas.
+1. **Extract & Load** — `dlt` carrega 5 arquivos CSV em tabelas brutas no PostgreSQL
+2. **Transform** — `dbt` organiza as transformações em camadas (staging → intermediate → marts)
+3. **Query** — 5 consultas SQL respondem às perguntas de negócio
 
-## Sobre o Desafio
+Todo o fluxo é orquestrado pelo **Apache Airflow**, executado via Docker Compose.
 
-O foco deste desafio está em fundamentos de Python e SQL aplicados localmente com PostgreSQL.
+---
 
-Você receberá arquivos CSV com uma amostra de dados brutos de Instagram e TikTok já extraída das plataformas. A proposta é construir uma solução reproduzível, da carga inicial dos arquivos até um modelo analítico capaz de responder a perguntas de negócio sobre alcance, engajamento e sentimento de comentários.
+## Arquitetura
 
-Você trabalhará com dados imperfeitos do mundo real. Esperamos uma solução clara, correta, bem justificada e fácil de executar.
+```
+CSV files (5)
+    │
+    ▼
+┌─────────────────┐
+│  dlt pipeline   │  ← Python (pandas + dlt)
+│  raw ingestion  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  PostgreSQL     │  raw.* tables
+│  (Docker)       │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  dbt models     │  staging → intermediate → marts
+│  (SQL + macros) │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  marts.* tables │  mart_content_performance
+│  (PostgreSQL)   │  mart_content_with_sentiment
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  business       │  5 queries answering
+│  queries (.sql) │  business questions
+└─────────────────┘
 
-## Dados Fornecidos
+Orchestration: Apache Airflow (DAG @once)
+Containerization: Docker Compose (PostgreSQL + Airflow + Streamlit)
+```
 
-Os arquivos serão enviados junto com o desafio:
+### Serviços
 
-- `instagram_media.csv`
-- `instagram_media_insights.csv`
-- `instagram_comments.csv`
-- `tiktok_posts.csv`
-- `tiktok_comments.csv`
+| Serviço | Porta | Descrição |
+|---|---|---|
+| PostgreSQL | `5432` | Banco de dados principal |
+| Airflow UI | `8080` | Orquestração e monitoramento do pipeline |
+| Streamlit | `8501` | Dashboard interativo com resultados |
 
-Os comentários já virão enriquecidos com classificação de sentimento.
+### Camadas do Modelo de Dados
 
-Estamos disponibilizando neste repositório um dicionário de dados com as colunas disponíveis em cada tabela (dicionario.md).
+| Camada | Prefixo | Propósito |
+|---|---|---|
+| **Raw** | `raw.*` | Carga direta dos CSVs via dlt, sem transformação |
+| **Staging** | `stg_*` | Limpeza, tipagem e padronização de cada fonte |
+| **Intermediate** | `int_*` | Unificação de métricas entre Instagram e TikTok |
+| **Marts** | `mart_*` | Tabelas analíticas finais prontas para consulta |
 
-## Objetivo do Desafio
+---
 
-Sua solução deve:
+## Modelo de Dados
 
-1. Carregar os arquivos CSV em tabelas brutas no PostgreSQL.
-2. Tratar as inconsistências mínimas necessárias para tornar os dados utilizáveis.
-3. Construir um modelo analítico que permita responder às perguntas de negócio abaixo.
-4. Entregar as consultas SQL e a documentação necessária para reproduzir o resultado.
+### Tabelas Principais
 
-## Ambiente
+```
+raw.instagram_media          ─┐
+raw.instagram_media_insights ─┤──► stg_instagram__media ──► int_instagram__content_metrics ──┐
+raw.instagram_comments       ─┘──► stg_instagram__comments ──► int_comments__unified ────────┤
+                                                                                              ├──► int_content__unified ──► mart_content_performance
+raw.tiktok_posts             ───────────────────────────► stg_tiktok__posts ──► int_tiktok__content_metrics ──┤
+raw.tiktok_comments          ───────────────────────────► stg_tiktok__comments ───────────────────────────────┘
+                                                                                              │
+                                                                                              ├──► mart_content_with_sentiment
+                                                                                              │
+                                                                                              └──► mart_comment_sentiment
+```
 
-Use PostgreSQL como banco local da solução.
+### Granularidade
 
-O banco deve ser executado com Docker Compose.
+| Tabela | Granularidade | Chave |
+|---|---|---|
+| `mart_content_performance` | 1 linha por conteúdo (post/story) | `platform + content_id` |
+| `mart_content_with_sentiment` | 1 linha por conteúdo com métricas de sentimento agregadas | `platform + content_id` |
+| `mart_comment_sentiment` | 1 linha por conta/plataforma com proporção de sentimentos | `account_name + platform` |
 
-## Escopo Esperado
+### Fórmula de Engajamento
 
-### Parte 1. Ingestão dos dados
+A métrica `engagement_rate` é calculada como:
 
-Desenvolva uma forma reproduzível de carregar os arquivos CSV brutos em tabelas iniciais.
+```
+engagement_rate = (engagement_total / reach) * 100
+```
 
-Esperamos nesta etapa:
+O `engagement_total` é harmonizado entre plataformas:
 
-- um ou mais scripts em Python para automatizar a carga dos arquivos
-- instruções claras de execução
-- tratamento básico de erros
-- indicação de sucesso ou falha durante a carga
+- **Instagram**: usa `total_interactions` quando disponível; caso contrário, soma `likes + comments + shares + saved + profile_visits + follows`
+- **TikTok**: soma `likes + comments + shares + favorites + profile_views + new_followers`
 
-### Parte 2. Transformação e modelagem
+**Justificativa**: O Instagram fornece `total_interactions` como métrica consolidada pela API, então a priorizamos. Quando indisponível, usamos a soma manual das métricas disponíveis. Para o TikTok, não há equivalente direto, então somamos as interações individuais. O denominador é `reach` (alcance) por ser a métrica mais consistente entre ambas as plataformas para representar a audiência exposta.
 
-Após a ingestão, transforme os dados com SQL até chegar a um modelo analítico adequado para responder às perguntas de negócio.
-
-Você pode organizar essa etapa da forma que considerar mais apropriada. Vale usar apenas SQL ou ferramentas como `dbt`, se desejar. O uso de `dbt` é bem-vindo, mas não é obrigatório.
-
-Esperamos nesta etapa:
-
-- definição clara do nível de detalhe de cada tabela final
-- joins coerentes entre as tabelas de conteúdo, métricas e comentários
-- padronização mínima de métricas entre Instagram e TikTok
-- decisões de modelagem compatíveis com as perguntas analíticas
-- documentação das principais escolhas e simplificações
-
-Se for necessário definir uma fórmula de engajamento ou harmonizar métricas entre plataformas, explique essa escolha no README.
-
-Preferimos um modelo analítico bem pensado e bem justificado a uma arquitetura mais complexa do que o necessário.
-
-## Organização Sugerida
-
-Você não precisa seguir exatamente a estrutura abaixo, mas sugerimos uma organização mínima para facilitar a avaliação:
-
-- `src/` para scripts Python de ingestão e apoio
-- `sql/` ou `transformations/` para scripts SQL de transformação, caso não use `dbt`
-- `dbt/` para o projeto, caso opte por usar `dbt`
-- `queries/` para as consultas finais que respondem às perguntas de negócio
-- `README.md` com instruções de execução e decisões técnicas
-
-Se fizer sentido para sua solução, sugerimos também separar tabelas ou etapas em camadas com convenções como:
-
-- `raw_*` para carga inicial dos CSVs
-- `stg_*` para padronização e limpeza
-- `mart_*` para tabelas ou views analíticas finais
-
-Essas convenções são apenas sugestões. Você pode adotar outra organização, desde que ela seja clara e consistente.
+---
 
 ## Perguntas de Negócio
 
-Sua solução deve responder obrigatoriamente às 5 perguntas abaixo com SQL:
+| # | Pergunta | Arquivo |
+|---|---|---|
+| 1 | Melhor dia da semana para publicar por conta | `queries/pergunta_01.sql` |
+| 2 | Plataforma com maior proporção de comentários negativos por conta | `queries/pergunta_02.sql` |
+| 3 | Top 10 conteúdos com maior taxa de engajamento | `queries/pergunta_03.sql` |
+| 4 | Top 3 conteúdos por conta com maior taxa de engajamento | `queries/pergunta_04.sql` |
+| 5 | Melhor formato de conteúdo por conta | `queries/pergunta_05.sql` |
 
-1. Para cada conta, qual é o melhor dia da semana para publicar, considerando o engajamento médio por conteúdo?
-2. Para cada conta, qual plataforma apresentou a maior proporção de comentários negativos no período analisado?
-3. Quais são os 10 conteúdos com maior taxa de engajamento no período, considerando Instagram e TikTok?
-4. Quais são os 3 conteúdos com maior taxa de engajamento por conta no período, considerando Instagram e TikTok?
-5. Para cada conta, qual formato de conteúdo apresenta o melhor desempenho médio de engajamento?
+---
 
-## Entregáveis
+## Como Executar
 
-### 1. Repositório no GitHub
+### Pré-requisitos
 
-Repositório público com todo o código da solução.
+- Docker e Docker Compose instalados
+- PowerShell (Windows) ou terminal compatível
 
-### 2. README
+### Execução Completa (Recomendado)
 
-O README do repositório deve explicar de forma objetiva:
+Um único comando sobe todo o ambiente, executa o pipeline e monitora o resultado:
 
-- visão geral da solução
-- arquitetura ou fluxo adotado
-- como preparar o ambiente
-- como subir o PostgreSQL com Docker Compose
-- como executar a ingestão
-- como executar as transformações
-- como rodar as queries
-- principais decisões técnicas
-- justificativas para escolhas de modelagem e tecnologia
-- limitações, premissas e melhorias futuras
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
+```
 
-### 3. Modelagem de dados
+O script automaticamente:
+- Sobe o Docker Compose (com build na primeira vez)
+- Valida containers e DAG
+- Detecta runs finalizados e faz reset automático para permitir rerun
+- Aguarda o pipeline executar e acompanha até `success` ou `failed`
+- Imprime o status final de cada task
+- Timeout padrão: **20 minutos**
 
-Inclua uma representação simples do modelo proposto, contendo:
+### Execução Manual via Docker Compose
 
-- tabelas principais
-- granularidade
-- principais relacionamentos
+Se preferir, o pipeline executa automaticamente apenas com:
 
-Pode ser um diagrama MER, um esquema em texto ou ambos.
+```bash
+docker compose up -d
+```
 
-### 4. Queries analíticas
+O DAG usa `schedule="@once"`, ou seja, dispara sozinho assim que o scheduler inicializa.
 
-Arquivos `.sql` respondendo às 5 perguntas de negócio.
+### Parâmetros do Script
 
-## Critérios de Avaliação
+```powershell
+# Pular rebuild da imagem (ambiente já montado)
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1 -SkipBuild
 
-O que vamos avaliar:
+# Ajustar timeout
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1 -TimeoutMinutes 30
+```
 
-- corretude da carga e reprodutibilidade da solução
-- clareza, organização e legibilidade do código Python
-- qualidade, correção e legibilidade do SQL
-- coerência entre granularidade, modelagem e perguntas de negócio
-- capacidade de lidar com inconsistências entre fontes sem complexidade desnecessária
-- capacidade de justificar decisões e trade-offs de forma objetiva
-- clareza da documentação e facilidade de execução da solução
+### Rerun do Pipeline
 
-## Diferenciais
+O script detecta automaticamente runs finalizados e dispara um novo. Para rerun manual:
 
-Os itens abaixo são diferenciais, não obrigatórios.
+```bash
+docker exec airflow_scheduler airflow dags delete retize_social_elt --yes
+```
 
-Diferenciais de engenharia de dados:
+O scheduler recriará automaticamente um novo run.
 
-- uso de `dbt` para organizar transformações e testes
-- orquestração simples do fluxo de ingestão e transformação
-- conteinerização adicional da solução além do PostgreSQL com Docker Compose
-- testes ou validações de qualidade de dados
-- logging estruturado
-- documentação especialmente clara de troubleshooting e decisões de modelagem
+### Airflow UI
 
-Diferenciais de apresentação:
+- URL: `http://localhost:8080`
+- Usuário: `airflow`
+- Senha: `airflow`
 
-- uma forma simples de apresentação dos dados finais, como um dashboard em Streamlit ou uma API com um endpoint de resumo
+### Dashboard Streamlit
 
-## Política de Uso de Inteligência Artificial
+Após o pipeline finalizar, acesse o dashboard interativo:
 
-O uso de ferramentas de IA é permitido neste desafio.
+- URL: `http://localhost:8501`
+- 5 páginas, uma para cada pergunta de negócio
+- Tabelas com resultados e gráficos interativos (Plotly)
+- Light mode, design limpo e responsivo
 
-Uso recomendado:
+---
 
-- apoio para debugging
-- revisão de código
-- esclarecimento de conceitos técnicos
-- apoio na escrita de documentação
+## Execução Passo a Passo (Sem Airflow)
 
-Uso não recomendado:
+Se quiser executar cada etapa manualmente:
 
-- delegar à IA a construção integral da solução
-- copiar código sem revisar, adaptar e compreender
-- entregar decisões técnicas que você não consiga justificar
+### 1. Subir o PostgreSQL
 
-Se você usar IA de forma relevante, pode incluir no README um breve resumo de como ela foi utilizada. Isso não é obrigatório, mas é bem-vindo.
+```bash
+docker compose up -d postgres
+```
 
-A solução entregue deve refletir sua capacidade de engenharia e tomada de decisão. Durante a conversa sobre o desafio, esperamos que você consiga explicar e defender as escolhas feitas.
+### 2. Executar a Ingestão
 
-## Prazo de Entrega
+```bash
+python -m src.ingestion.dlt_pipeline
+```
 
-- 7 dias corridos a partir do recebimento do desafio
+Carrega os 5 CSVs em tabelas `raw.*` no PostgreSQL, com validação de contagem de linhas.
 
-## Forma de Envio
+### 3. Executar as Transformações
 
-- repositório público no GitHub
-- envio do link do repositório para `desafios.tech@retize.com.br`
-- sugestão de assunto do e-mail: `Desafio Técnico | Engenheiro(a) de Dados | [Seu Nome]`
+```bash
+dbt run --project-dir dbt --profiles-dir dbt --target dev
+dbt test --project-dir dbt --profiles-dir dbt --target dev
+```
 
-## Orientações Finais
+Executa todos os modelos dbt (staging → intermediate → marts) e roda os testes de qualidade.
 
-Busque uma solução simples, clara e reproduzível.
+### 4. Rodar as Queries
 
-Priorize correção, clareza e a capacidade de justificar suas escolhas.
+```bash
+psql -h localhost -U retize_user -d retize_social -f queries/pergunta_01.sql
+psql -h localhost -U retize_user -d retize_social -f queries/pergunta_02.sql
+psql -h localhost -U retize_user -d retize_social -f queries/pergunta_03.sql
+psql -h localhost -U retize_user -d retize_social -f queries/pergunta_04.sql
+psql -h localhost -U retize_user -d retize_social -f queries/pergunta_05.sql
+```
 
-Se precisar assumir simplificações, documente essas decisões no repositório.
+---
 
-Também é válido registrar melhorias que você implementaria em uma próxima versão.
+## Principais Decisões Técnicas
+
+### Por que dlt para ingestão?
+
+- **Type inference automático**: infere tipos de colunas a partir dos dados
+- **Write disposition `replace`**: garante idempotência — reruns substituem dados anteriores
+- **Validação embutida**: contagem de linhas pós-carga garante integridade
+- **Simplicidade**: menos código boilerplate comparado a scripts manuais de COPY/INSERT
+
+### Por que dbt para transformação?
+
+- **Organização em camadas**: staging → intermediate → marts facilita manutenção e debugging
+- **Testes de qualidade**: `dbt test` valida constraints (not null, unique, accepted values)
+- **Macros reutilizáveis**: fórmula de engajamento centralizada em macro, evitando duplicação
+- **Linhagem de dados**: `dbt docs` gera grafo de dependências entre modelos
+
+### Por que Airflow para orquestração?
+
+- **Visibilidade**: UI centralizada com logs por task, estados e histórico de execuções
+- **Retries automáticos**: configuração de retries com backoff exponencial
+- **Diferencial do desafio**: conteinerização completa da stack (PostgreSQL + Airflow)
+
+### Por que PostgreSQL local?
+
+- Requisito do desafio
+- Suporte nativo a tipos como `timestamptz`, funções de extração de data (`extract(dow from ...)`) e janelas analíticas (`row_number() over (...)`)
+
+---
+
+## Limitações e Premissas
+
+1. **Período de dados**: as queries filtram dados entre `2025-03-01` e `2026-03-31`, conforme especificado no dicionário de dados
+2. **Engajamento por reach**: a fórmula usa `reach` como denominador. Alternativas como `views` ou `total_interactions` foram consideradas, mas `reach` é a métrica mais consistente entre plataformas
+3. **Stories do Instagram**: métricas como `comments_count` e `is_comment_enabled` podem ser nulas para stories. O modelo trata isso com `coalesce` e filtros apropriados
+4. **Sentimento previsto**: os comentários já vêm com `predicted_sentiment` classificado. Não foi feita reclassificação ou validação adicional
+5. **IDs não padronizados**: Instagram usa `id`, TikTok usa `item_id`. A harmonização ocorre na camada intermediate
+6. **Escala local**: a solução foi projetada para dados de amostra. Para produção em escala, o destino de ingestão migraria para BigQuery (conforme stack da Retize)
+
+---
+
+## Melhorias Futuras
+
+- **Incremental loads**: substituir `write_disposition="replace"` por `append` com detecção de duplicatas para evitar reprocessamento completo
+- **Data quality avançada**: adicionar testes dbt customizados (ex: validação de ranges, consistência cross-platform)
+- **CI/CD**: pipeline de testes automatizados para SQL e Python em PRs
+- **Monitoramento**: alertas de falha no Airflow via Slack/email
+- **Migração para BigQuery**: adaptar o destino dlt e o adapter dbt para BigQuery, alinhando à stack de produção da Retize
+
+---
+
+## Organização do Repositório
+
+```
+├── airflow/
+│   ├── dags/           # DAG do Airflow (retize_social_elt.py)
+│   └── logs/           # Logs de execução
+├── dashboard/
+│   ├── app.py          # Aplicação Streamlit (dashboard)
+│   └── requirements.txt
+├── dbt/
+│   ├── models/         # Modelos SQL (staging → intermediate → marts)
+│   ├── macros/         # Macros reutilizáveis (engagement calculation)
+│   └── tests/          # Testes de qualidade de dados
+├── queries/            # 5 queries respondendo perguntas de negócio
+├── scripts/
+│   └── run.ps1         # Script único de execução completa
+├── src/
+│   └── ingestion/      # Pipeline dlt de ingestão dos CSVs
+├── sql/
+│   └── bootstrap/      # Scripts de inicialização do PostgreSQL
+├── docker-compose.yml  # Stack completa (PostgreSQL + Airflow + Streamlit)
+├── docker/
+│   ├── airflow/        # Dockerfile e requirements do Airflow
+│   └── streamlit/      # Dockerfile do Streamlit
+├── dicionario.md       # Dicionário de dados dos CSVs
+└── requirements.txt    # Dependências Python
+```
+
+---
+
+## Uso de IA
+
+Este desafio utilizou ferramentas de IA como apoio em:
+
+- Debugging de erros de build e configuração do Airflow
+- Revisão de código Python e SQL
+- Escrita e organização da documentação
+
+Todas as decisões técnicas, modelagem de dados e consultas SQL foram revisadas e compreendidas antes da entrega.
